@@ -181,4 +181,9 @@ pub enum Error {
     InvalidBurnAmount = 12,
     BurnAmountExceedsBalance = 13,
     ContractPaused = 14,
+    MissingAdmin = 15,
+    MissingTreasury = 16,
+    InvalidBaseFee = 17,
+    InvalidMetadataFee = 18,
+    InconsistentTokenCount = 19,
 }
