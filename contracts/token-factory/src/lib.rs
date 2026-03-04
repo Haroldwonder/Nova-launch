@@ -671,6 +671,181 @@ impl TokenFactory {
     pub fn get_burn_count(env: Env, token_index: u32) -> u32 {
         burn::get_burn_count(&env, token_index)
     }
+    /// Set metadata URI for a token (one-time only)
+    ///
+    /// Allows the token creator to set an IPFS metadata URI for their token.
+    /// This operation can only be performed once per token - metadata is
+    /// immutable after being set to ensure data integrity and trust.
+    ///
+    /// # Mutability Rules
+    /// - Metadata can only be set if it's currently `None`
+    /// - Once set, metadata cannot be changed or removed
+    /// - This ensures permanent, tamper-proof token metadata
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `token_index` - Index of the token to update
+    /// * `admin` - Token creator address (must authorize and match creator)
+    /// * `metadata_uri` - IPFS URI for token metadata (e.g., "ipfs://Qm...")
+    ///
+    /// # Returns
+    /// Returns `Ok(())` on success
+    ///
+    /// # Errors
+    /// * `Error::ContractPaused` - Contract is currently paused
+    /// * `Error::TokenNotFound` - Token index is invalid
+    /// * `Error::Unauthorized` - Caller is not the token creator
+    /// * `Error::MetadataAlreadySet` - Metadata has already been set (immutable)
+    ///
+    /// # Examples
+    /// ```
+    /// // Set metadata for the first time
+    /// let metadata_uri = String::from_str(&env, "ipfs://QmTest123");
+    /// factory.set_metadata(&env, 0, creator, metadata_uri)?;
+    ///
+    /// // Attempting to change metadata will fail
+    /// let new_uri = String::from_str(&env, "ipfs://QmTest456");
+    /// let result = factory.set_metadata(&env, 0, creator, new_uri);
+    /// assert_eq!(result, Err(Error::MetadataAlreadySet));
+    /// ```
+    pub fn set_metadata(
+        env: Env,
+        token_index: u32,
+        admin: Address,
+        metadata_uri: String,
+    ) -> Result<(), Error> {
+        // Early return if contract is paused
+        if storage::is_paused(&env) {
+            return Err(Error::ContractPaused);
+        }
+
+        // Require admin authorization
+        admin.require_auth();
+
+        // Get token info
+        let mut token_info = storage::get_token_info(&env, token_index)
+            .ok_or(Error::TokenNotFound)?;
+
+        // Verify admin is the token creator
+        if token_info.creator != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        // Enforce immutability: metadata can only be set once
+        if token_info.metadata_uri.is_some() {
+            return Err(Error::MetadataAlreadySet);
+        }
+
+        // Set metadata URI
+        token_info.metadata_uri = Some(metadata_uri.clone());
+        storage::set_token_info(&env, token_index, &token_info);
+
+        // Also update by address lookup
+        storage::set_token_info_by_address(&env, &token_info.address, &token_info);
+
+        // Emit metadata set event
+        events::emit_metadata_set(&env, &token_info.address, &admin, &metadata_uri);
+
+        Ok(())
+    }
+
+    /// Mint additional tokens to a specified address
+    ///
+    /// Allows the token creator (admin) to mint new tokens and send them to any address.
+    /// This increases the total supply of the token.
+    ///
+    /// # Security
+    /// - Only the token creator can mint tokens
+    /// - Contract must not be paused
+    /// - Amount must be positive
+    /// - Prevents arithmetic overflow
+    ///
+    /// # Arguments
+    /// * `env` - The contract environment
+    /// * `token_index` - Index of the token to mint
+    /// * `admin` - Token creator address (must authorize and match creator)
+    /// * `to` - Recipient address for the newly minted tokens
+    /// * `amount` - Amount of tokens to mint (must be > 0)
+    ///
+    /// # Returns
+    /// Returns `Ok(())` on success
+    ///
+    /// # Errors
+    /// * `Error::ContractPaused` - Contract is currently paused
+    /// * `Error::TokenNotFound` - Token index is invalid
+    /// * `Error::Unauthorized` - Caller is not the token creator
+    /// * `Error::InvalidAmount` - Amount is zero or negative
+    /// * `Error::ArithmeticError` - Minting would cause overflow
+    ///
+    /// # Examples
+    /// ```
+    /// // Mint 1,000,000 tokens to a recipient
+    /// let amount = 1_000_000_0000000i128; // 1M tokens with 7 decimals
+    /// let recipient = Address::generate(&env);
+    /// factory.mint_tokens(&env, 0, creator, recipient, amount)?;
+    ///
+    /// // Verify new supply
+    /// let token_info = factory.get_token_info(&env, 0)?;
+    /// assert_eq!(token_info.total_supply, initial_supply + amount);
+    /// ```
+    pub fn mint_tokens(
+        env: Env,
+        token_index: u32,
+        admin: Address,
+        to: Address,
+        amount: i128,
+    ) -> Result<(), Error> {
+        // Early return if contract is paused
+        if storage::is_paused(&env) {
+            return Err(Error::ContractPaused);
+        }
+
+        // Require admin authorization
+        admin.require_auth();
+
+        // Validate amount is positive
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        // Get token info
+        let mut token_info = storage::get_token_info(&env, token_index)
+            .ok_or(Error::TokenNotFound)?;
+
+        // Verify admin is the token creator
+        if token_info.creator != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        // Get current balance of recipient
+        let current_balance = storage::get_balance(&env, token_index, &to);
+
+        // Calculate new balance with overflow check
+        let new_balance = current_balance
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticError)?;
+
+        // Calculate new total supply with overflow check
+        let new_supply = token_info
+            .total_supply
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticError)?;
+
+        // Update recipient balance
+        storage::set_balance(&env, token_index, &to, new_balance);
+
+        // Update total supply
+        token_info.total_supply = new_supply;
+        storage::set_token_info(&env, token_index, &token_info);
+
+        // Also update by address lookup
+        storage::set_token_info_by_address(&env, &token_info.address, &token_info);
+
+        // Emit mint event
+        events::emit_tokens_minted(&env, &token_info.address, &admin, &to, amount);
+
+        Ok(())
+    }
 
 }
 
@@ -732,3 +907,9 @@ mod fuzz_test;
 #[cfg(test)]
 mod integration_test;
 mod gas_benchmark_comprehensive;
+
+#[cfg(test)]
+mod set_metadata_test;
+
+#[cfg(test)]
+mod mint_tokens_test;

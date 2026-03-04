@@ -107,3 +107,33 @@ pub fn emit_token_burned(env: &Env, token_address: &Address, amount: i128) {
         (amount,),
     );
 }
+/// Emit metadata set event with optimized payload
+///
+/// Emitted when metadata URI is set for a token (one-time only)
+pub fn emit_metadata_set(
+    env: &Env,
+    token_address: &Address,
+    admin: &Address,
+    metadata_uri: &soroban_sdk::String,
+) {
+    env.events().publish(
+        (symbol_short!("meta_set"), token_address.clone()),
+        (admin, metadata_uri),
+    );
+}
+
+/// Emit tokens minted event with optimized payload
+///
+/// Emitted when new tokens are minted by the admin
+pub fn emit_tokens_minted(
+    env: &Env,
+    token_address: &Address,
+    admin: &Address,
+    to: &Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("tok_mint"), token_address.clone()),
+        (admin, to, amount),
+    );
+}
