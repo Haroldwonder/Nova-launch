@@ -61,7 +61,7 @@ pub struct ContractMetadata {
 /// * `total_burned` - Cumulative amount of tokens burned
 /// * `burn_count` - Number of burn operations performed
 /// * `metadata_uri` - Optional IPFS URI for additional metadata
-/// * `created_at` - Unix timestamp of token creation
+/// * `is_paused` - Token-level pause flag
 /// * `clawback_enabled` - Whether admin can burn from any address
 ///
 /// # Examples
@@ -84,8 +84,8 @@ pub struct TokenInfo {
     pub burn_count: u32,
     pub metadata_uri: Option<String>,
     pub created_at: u64,
-    pub is_paused: bool,   // NEW — token-level pause flag
     pub is_paused: bool,
+    pub clawback_enabled: bool,
 }
 
 /// Compact read-only snapshot of a token's current state.
@@ -93,15 +93,24 @@ pub struct TokenInfo {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TokenStats {
-    pub current_supply: i128,  // live circulating supply
-    pub total_burned:   i128,  // cumulative amount burned since creation
-    pub burn_count:     u32,   // number of burn operations performed
-    pub is_paused:      bool,  // token-level pause flag
-    pub has_clawback:   bool,  // clawback policy flag (reserved; always false for now)
+    pub current_supply: i128,
     pub total_burned: i128,
     pub burn_count: u32,
+    pub is_paused: bool,
+    pub has_clawback: bool,
     pub clawback_enabled: bool,
     pub freeze_enabled: bool,
+}
+
+/// Token creation parameters for batch operations
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenCreationParams {
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u32,
+    pub initial_supply: i128,
+    pub metadata_uri: Option<String>,
 }
 
 /// Batch fee update structure for Phase 2 optimization
@@ -160,13 +169,10 @@ pub enum DataKey {
     BaseFee,
     MetadataFee,
     TokenCount,
-    Token(u32),
-    Balance(u32, Address),
-    BurnCount(u32),
-    TokenPaused(u32),      // NEW — token_index -> bool
-    TokenPaused(u32),
-    TotalBurned(u32),   // NEW — cumulative burned amount per token
-    TokenByAddress(Address),
+    Token(u32),            // Token index -> TokenInfo
+    TokenByAddress(Address), // Token address -> TokenInfo
+    Balance(u32, Address), // (token_index, holder) -> i128
+    BurnCount(u32),        // token_index -> u32
     Paused,
     TimelockConfig,
     PendingChange(u64),
@@ -176,6 +182,9 @@ pub enum DataKey {
     TreasuryPolicy,
     WithdrawalPeriod,
     AllowedRecipient(Address),
+    StreamCount,
+    Stream(u32),
+    StreamByCreator(Address, u32),
 }
 
 /// Contract error codes
@@ -183,49 +192,60 @@ pub enum DataKey {
 /// Defines all possible error conditions that can occur during
 /// contract execution. Each error has a unique numeric code.
 ///
-/// # Variants
-/// * `InsufficientFee` - Provided fee is less than required
-/// * `Unauthorized` - Caller lacks required permissions
-/// * `InvalidParameters` - Function arguments are invalid
-/// * `TokenNotFound` - Requested token does not exist
-/// * `MetadataAlreadySet` - Token metadata cannot be changed
-/// * `AlreadyInitialized` - Contract has already been initialized
-/// * `InsufficientBalance` - Account balance too low for operation
-/// * `ArithmeticError` - Numeric overflow or underflow occurred
-/// * `BatchTooLarge` - Batch operation exceeds maximum size
-/// * `InvalidAmount` - Amount is zero or negative
-/// * `ClawbackDisabled` - Clawback not enabled for this token
-/// * `InvalidBurnAmount` - Burn amount is invalid
-/// * `BurnAmountExceedsBalance` - Burn amount exceeds available balance
-/// * `ContractPaused` - Operation not allowed while paused
-/// * `TimelockNotExpired` - Timelock period has not elapsed
-/// * `ChangeAlreadyExecuted` - Change has already been executed
-/// * `MaxSupplyExceeded` - Minting would exceed max supply cap
-/// * `InvalidMaxSupply` - Max supply is less than initial supply
-/// * `WithdrawalCapExceeded` - Withdrawal would exceed daily cap
-/// * `RecipientNotAllowed` - Recipient not in allowlist
+/// # Error Code Mapping
+/// ## General Errors (1-9)
+/// * `InsufficientFee` (1) - Provided fee is less than required
+/// * `Unauthorized` (2) - Caller lacks required permissions
+/// * `InvalidParameters` (3) - Function arguments are invalid
+/// * `TokenNotFound` (4) - Requested token does not exist
+/// * `MetadataAlreadySet` (5) - Token metadata cannot be changed
+/// * `AlreadyInitialized` (6) - Contract has already been initialized
+/// * `InsufficientBalance` (7) - Account balance too low for operation
+/// * `ArithmeticError` (8) - Numeric overflow or underflow occurred
+/// * `BatchTooLarge` (9) - Batch operation exceeds maximum size
+///
+/// ## Token Errors (10-18)
+/// * `InvalidAmount` (10) - Amount is zero or negative
+/// * `ClawbackDisabled` (11) - Clawback not enabled for this token
+/// * `InvalidBurnAmount` (12) - Burn amount is invalid
+/// * `BurnAmountExceedsBalance` (13) - Burn amount exceeds available balance
+/// * `ContractPaused` (14) - Operation not allowed while paused
+/// * `TimelockNotExpired` (15) - Timelock period has not elapsed
+/// * `ChangeAlreadyExecuted` (16) - Change has already been executed
+/// * `MaxSupplyExceeded` (17) - Minting would exceed max supply cap
+/// * `InvalidMaxSupply` (18) - Max supply is less than initial supply
+///
+/// ## Treasury Errors (19-20)
+/// * `WithdrawalCapExceeded` (19) - Withdrawal would exceed daily cap
+/// * `RecipientNotAllowed` (20) - Recipient not in allowlist
+///
+/// ## Validation Errors (21-25)
+/// * `MissingAdmin` (21) - Admin address not set
+/// * `MissingTreasury` (22) - Treasury address not set
+/// * `InvalidBaseFee` (23) - Base fee is negative
+/// * `InvalidMetadataFee` (24) - Metadata fee is negative
+/// * `InconsistentTokenCount` (25) - Token count mismatch
+///
+/// ## Stream Errors (26-31)
+/// * `StreamNotFound` (26) - Requested stream does not exist
+/// * `InvalidSchedule` (27) - Stream schedule parameters are invalid
+/// * `CliffNotReached` (28) - Cliff period has not elapsed
+/// * `NothingToClaim` (29) - No tokens available to claim
+/// * `StreamPaused` (30) - Stream is paused
+/// * `StreamCancelled` (31) - Stream has been cancelled
 ///
 /// # Examples
 /// ```
 /// if amount <= 0 {
 ///     return Err(Error::InvalidAmount);
 /// }
+/// if stream_id >= stream_count {
+///     return Err(Error::StreamNotFound);
+/// }
 /// ```
 #[contracterror]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
-    InsufficientFee     = 1,
-    Unauthorized        = 2,
-    InvalidParameters   = 3,
-    TokenNotFound       = 4,
-    MetadataAlreadySet  = 5,
-    AlreadyInitialized  = 6,
-    InsufficientBalance = 7,
-    ArithmeticError     = 8,
-    BatchTooLarge       = 9,
-    TokenPaused         = 10,  // NEW
-}
-    TokenPaused         = 10,
     InsufficientFee = 1,
     Unauthorized = 2,
     InvalidParameters = 3,
@@ -240,26 +260,8 @@ pub enum Error {
     InvalidBurnAmount = 12,
     BurnAmountExceedsBalance = 13,
     ContractPaused = 14,
-    TimelockNotExpired = 15,
-    ChangeAlreadyExecuted = 16,
-    MaxSupplyExceeded = 17,
-    InvalidMaxSupply = 18,
-    WithdrawalCapExceeded = 19,
-    RecipientNotAllowed = 20,
-}
-
-/// Timelock configuration
-///
-/// Defines the delay period for sensitive operations.
-///
-/// # Fields
-/// * `delay_seconds` - Time delay in seconds before changes can be executed
-/// * `enabled` - Whether timelock is currently active
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TimelockConfig {
-    pub delay_seconds: u64,
-    pub enabled: bool,
+    InvalidTokenParams = 15,
+    BatchCreationFailed = 16,
 }
 
 /// Type of pending change
@@ -310,11 +312,11 @@ pub struct PendingChange {
 /// Uses token index as the cursor for deterministic ordering.
 ///
 /// # Fields
-/// * `next_index` - The next token index to fetch (None = end of results)
+/// * `next_index` - The next token index to fetch (u32::MAX = end of results)
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaginationCursor {
-    pub next_index: Option<u32>,
+    pub next_index: u32,
 }
 
 /// Paginated token result
@@ -328,7 +330,7 @@ pub struct PaginationCursor {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaginatedTokens {
     pub tokens: soroban_sdk::Vec<TokenInfo>,
-    pub cursor: Option<PaginationCursor>,
+    pub cursor: Option<u32>,
 }
 
 /// Treasury withdrawal policy

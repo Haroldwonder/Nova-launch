@@ -113,7 +113,7 @@ pub fn emit_token_registered(env: &Env, token_address: &Address, creator: &Addre
 /// The ledger automatically records transaction timestamps.
 pub fn emit_admin_transfer(env: &Env, old_admin: &Address, new_admin: &Address) {
     env.events().publish(
-        (symbol_short!("adm_xf_v1"),),
+        (symbol_short!("adm_xfer"),),
         (old_admin, new_admin),
     );
 }
@@ -171,7 +171,7 @@ pub fn emit_unpause(env: &Env, admin: &Address) {
 /// **Schema Stability**: This schema is immutable. Any changes require a new version.
 pub fn emit_fees_updated(env: &Env, base_fee: i128, metadata_fee: i128) {
     env.events().publish(
-        (symbol_short!("fee_up_v1"),),
+        (symbol_short!("fees_upd"),),
         (base_fee, metadata_fee),
     );
 }
@@ -201,7 +201,7 @@ pub fn emit_admin_burn(
     amount: i128,
 ) {
     env.events().publish(
-        (symbol_short!("adm_br_v1"), token_address.clone()),
+        (symbol_short!("adm_burn"), token_address.clone()),
         (admin, from, amount),
     );
 }
@@ -249,114 +249,35 @@ pub fn emit_clawback_toggled(
 /// Used when multiple tokens are burned in a batch operation
 pub fn emit_token_burned(env: &Env, token_address: &Address, amount: i128) {
     env.events().publish(
-        (symbol_short!("tok_br_v1"), token_address.clone()),
+        (symbol_short!("tkn_burn"), token_address.clone()),
         (amount,),
     );
 }
 
-
-// ── Timelock events ─────────────────────────────────────────
-
-/// Emit timelock configured event
-///
-/// Emitted when timelock is initialized or updated
-pub fn emit_timelock_configured(env: &Env, delay_seconds: u64) {
+/// Emit token created event
+/// 
+/// Published when a new token is successfully created
+pub fn emit_token_created(
+    env: &Env,
+    token_address: &Address,
+    creator: &Address,
+) {
     env.events().publish(
-        (symbol_short!("tl_cfg"),),
-        (delay_seconds,),
+        (symbol_short!("tkn_crtd"), token_address.clone()),
+        creator,
     );
 }
 
-/// Emit change scheduled event
-///
-/// Emitted when a sensitive change is scheduled with timelock
-pub fn emit_change_scheduled(env: &Env, change_id: u64, change_type: &crate::types::ChangeType, execute_at: u64) {
+/// Emit batch tokens created event
+/// 
+/// Published when multiple tokens are created in a batch operation
+pub fn emit_batch_tokens_created(
+    env: &Env,
+    creator: &Address,
+    count: u32,
+) {
     env.events().publish(
-        (symbol_short!("ch_sched"), change_id),
-        (change_type, execute_at),
-    );
-}
-
-/// Emit change executed event
-///
-/// Emitted when a pending change is successfully executed
-pub fn emit_change_executed(env: &Env, change_id: u64, change_type: &crate::types::ChangeType) {
-    env.events().publish(
-        (symbol_short!("ch_exec"), change_id),
-        (change_type,),
-    );
-}
-
-/// Emit change cancelled event
-///
-/// Emitted when a pending change is cancelled before execution
-pub fn emit_change_cancelled(env: &Env, change_id: u64, change_type: &crate::types::ChangeType) {
-    env.events().publish(
-        (symbol_short!("ch_cncl"), change_id),
-        (change_type,),
-    );
-}
-
-/// Emit treasury updated event
-///
-/// Emitted when treasury address is changed
-pub fn emit_treasury_updated(env: &Env, new_treasury: &Address) {
-    env.events().publish(
-        (symbol_short!("trs_upd"),),
-        (new_treasury,),
-    );
-}
-
-
-/// Emit mint event
-///
-/// Emitted when tokens are minted
-pub fn emit_mint(env: &Env, token_index: u32, to: &Address, amount: i128) {
-    env.events().publish(
-        (symbol_short!("mint"), token_index),
-        (to, amount),
-    );
-}
-
-
-// ── Treasury events ─────────────────────────────────────────
-
-/// Emit treasury withdrawal event
-///
-/// Emitted when fees are withdrawn from treasury
-pub fn emit_treasury_withdrawal(env: &Env, recipient: &Address, amount: i128) {
-    env.events().publish(
-        (symbol_short!("trs_wdrw"),),
-        (recipient, amount),
-    );
-}
-
-/// Emit recipient added event
-///
-/// Emitted when an address is added to the withdrawal allowlist
-pub fn emit_recipient_added(env: &Env, recipient: &Address) {
-    env.events().publish(
-        (symbol_short!("rec_add"),),
-        (recipient,),
-    );
-}
-
-/// Emit recipient removed event
-///
-/// Emitted when an address is removed from the withdrawal allowlist
-pub fn emit_recipient_removed(env: &Env, recipient: &Address) {
-    env.events().publish(
-        (symbol_short!("rec_rem"),),
-        (recipient,),
-    );
-}
-
-/// Emit treasury policy updated event
-///
-/// Emitted when treasury withdrawal policy is changed
-pub fn emit_treasury_policy_updated(env: &Env, daily_cap: i128, allowlist_enabled: bool) {
-    env.events().publish(
-        (symbol_short!("trs_pol"),),
-        (daily_cap, allowlist_enabled),
+        (symbol_short!("batch_tkn"),),
+        (creator, count),
     );
 }
