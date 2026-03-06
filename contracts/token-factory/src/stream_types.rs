@@ -15,6 +15,9 @@ pub struct StreamInfo {
     pub claimed_amount: i128,
     pub metadata: Option<String>,
     pub created_at: u64,
+    pub claimed: bool,
+    pub paused: bool,
+    pub cancelled: bool,
 }
 
 /// Metadata update request - only metadata can be changed

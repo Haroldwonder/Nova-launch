@@ -186,6 +186,9 @@ impl TokenFactory {
         storage::set_token_info_by_address(&env, &token_address, &token_info);
         storage::increment_token_count(&env);
 
+        // Mint initial supply to creator
+        storage::set_balance(&env, token_count, &creator, initial_supply);
+
         // Emit event
         events::emit_token_created(
             &env,
