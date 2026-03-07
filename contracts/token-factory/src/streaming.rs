@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, Vec};
+use soroban_sdk::{Address, Env, Vec, testutils::Ledger};
 use crate::types::{Error, StreamInfo, StreamParams};
 use crate::storage;
 use crate::events;
@@ -51,9 +51,12 @@ pub fn create_stream(
         start_time: params.start_time,
         end_time: params.end_time,
         cliff_time: params.cliff_time,
+        metadata: None,
         cancelled: false,
         paused: false,
-    };
+    
+        
+        };
     
     // Store stream
     storage::set_stream(env, stream_id, &stream);
@@ -228,8 +231,11 @@ pub fn batch_create_streams(
             start_time: stream_params.start_time,
             end_time: stream_params.end_time,
             cliff_time: stream_params.cliff_time,
+            metadata: None,
             cancelled: false,
             paused: false,
+        
+        
         };
         
         storage::set_stream(env, stream_id, &stream);
@@ -618,7 +624,7 @@ pub fn get_claimable_amount(env: &Env, stream_id: u64) -> Result<i128, Error> {
     calculate_claimable(env, &stream)
 }
 
-#[cfg(all(test, feature = "legacy-tests"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, testutils::Ledger, Env};
@@ -638,7 +644,7 @@ mod tests {
     
     #[test]
     fn test_claim_before_cliff_returns_error() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         // Create and store a stream directly
         let stream = StreamInfo {
             id: 0,
@@ -650,7 +656,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         // Set time just before cliff
@@ -661,7 +671,7 @@ mod tests {
     
     #[test]
     fn test_claim_at_cliff_succeeds() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         let stream = StreamInfo {
             id: 0,
             creator: creator.clone(),
@@ -672,7 +682,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         // Set time at cliff
@@ -735,7 +749,7 @@ mod tests {
     
     #[test]
     fn test_calculate_claimable_before_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -747,9 +761,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
             paused: false,
-            
+        
+        
         };
         
         // Set time before cliff
@@ -763,7 +779,7 @@ mod tests {
     
     #[test]
     fn test_calculate_claimable_after_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -777,6 +793,8 @@ mod tests {
             cliff_time: 150,
             cancelled: false,
             paused: false,
+            metadata: None,
+        
         };
         
         // Set time after cliff (halfway through vesting)
@@ -790,7 +808,7 @@ mod tests {
     
     #[test]
     fn test_calculate_claimable_after_end() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -804,6 +822,8 @@ mod tests {
             cliff_time: 150,
             cancelled: false,
             paused: false,
+            metadata: None,
+        
         };
         
         // Set time after end
@@ -817,7 +837,7 @@ mod tests {
 
     #[test]
     fn test_pause_and_unpause_stream() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let mut stream = StreamInfo {
             id: 1,
@@ -829,8 +849,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
             paused: false,
+        
+        
         };
         
         // Mock save stream to storage
@@ -859,7 +882,6 @@ mod tests {
         assert!(claim_success.unwrap() > 0);
     }
 
-}
 
     // ========================================================================
     // Cliff Boundary Tests
@@ -867,7 +889,7 @@ mod tests {
 
     #[test]
     fn test_claim_one_second_before_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -879,7 +901,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -896,7 +922,7 @@ mod tests {
 
     #[test]
     fn test_claim_exactly_at_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -908,7 +934,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -923,7 +953,7 @@ mod tests {
 
     #[test]
     fn test_claim_one_second_after_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -935,7 +965,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -951,7 +985,7 @@ mod tests {
 
     #[test]
     fn test_no_cliff_scenario() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         // Create stream with cliff_time == start_time (no cliff)
         let params = StreamParams {
@@ -979,7 +1013,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 100, // No cliff
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -997,7 +1035,7 @@ mod tests {
 
     #[test]
     fn test_full_cliff_scenario() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         // Create stream with cliff_time == end_time (full cliff)
         let params = StreamParams {
@@ -1024,7 +1062,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 200, // Full cliff
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1046,7 +1088,7 @@ mod tests {
 
     #[test]
     fn test_multiple_claims_before_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -1058,7 +1100,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1092,7 +1138,7 @@ mod tests {
 
     #[test]
     fn test_claim_before_then_at_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -1104,7 +1150,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1134,7 +1184,7 @@ mod tests {
 
     #[test]
     fn test_cancelled_stream_before_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         // Create and cancel a stream
         let stream = StreamInfo {
@@ -1147,7 +1197,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: true, // Stream is cancelled
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1162,7 +1216,7 @@ mod tests {
 
     #[test]
     fn test_cancelled_stream_after_cliff() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         // Create and cancel a stream
         let stream = StreamInfo {
@@ -1175,7 +1229,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: true, // Stream is cancelled
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1194,7 +1252,7 @@ mod tests {
 
     #[test]
     fn test_zero_duration_valid() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         // Create stream with start_time == end_time == cliff_time
         let params = StreamParams {
@@ -1222,7 +1280,11 @@ mod tests {
             start_time: 100,
             end_time: 100,
             cliff_time: 100,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1237,7 +1299,7 @@ mod tests {
 
     #[test]
     fn test_zero_duration_invalid_cliff() {
-        let (env, _creator, recipient) = setup();
+        let (env, _creator, recipient): (Env, Address, Address) = setup();
         
         // Attempt to create stream with start_time == end_time but cliff_time < start_time
         let params = StreamParams {
@@ -1260,7 +1322,7 @@ mod tests {
 
     #[test]
     fn test_query_before_cliff_returns_zero() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -1272,7 +1334,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1287,7 +1353,7 @@ mod tests {
 
     #[test]
     fn test_query_after_cliff_returns_vested() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -1299,7 +1365,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1325,7 +1395,7 @@ mod tests {
 
     #[test]
     fn test_cliff_time_immutable() {
-        let (env, creator, recipient) = setup();
+        let (env, creator, recipient): (Env, Address, Address) = setup();
         
         let stream = StreamInfo {
             id: 0,
@@ -1337,7 +1407,11 @@ mod tests {
             start_time: 100,
             end_time: 200,
             cliff_time: 150,
+            metadata: None,
             cancelled: false,
+            paused: false,
+        
+        
         };
         storage::set_stream(&env, 0, &stream);
         
@@ -1353,3 +1427,4 @@ mod tests {
         assert_eq!(stream1.cliff_time, stream2.cliff_time);
         assert_eq!(stream2.cliff_time, stream3.cliff_time);
     }
+}

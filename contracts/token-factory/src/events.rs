@@ -563,7 +563,7 @@ pub fn emit_proposal_created_v1(
     eta: u64,
 ) {
     env.events().publish(
-        (symbol_short!("prop_cr"), proposal_id),
+        (symbol_short!("prop_crv1"), proposal_id),
         (proposer, action_type, start_time, end_time, eta),
     );
 }
@@ -591,7 +591,7 @@ pub fn emit_vote_cast_v1(
     vote_choice: crate::types::VoteChoice,
 ) {
     env.events().publish(
-        (symbol_short!("vote_cs"), proposal_id),
+        (symbol_short!("vote_csv1"), proposal_id),
         (voter, vote_choice),
     );
 }
@@ -617,7 +617,7 @@ pub fn emit_proposal_queued_v1(
     eta: u64,
 ) {
     env.events().publish(
-        (symbol_short!("prop_qu"), proposal_id),
+        (symbol_short!("prop_quv1"), proposal_id),
         (eta,),
     );
 }
@@ -645,7 +645,7 @@ pub fn emit_proposal_executed_v1(
     success: bool,
 ) {
     env.events().publish(
-        (symbol_short!("prop_ex"), proposal_id),
+        (symbol_short!("prop_exv1"), proposal_id),
         (executor, success),
     );
 }
@@ -671,21 +671,12 @@ pub fn emit_proposal_cancelled_v1(
     canceller: &Address,
 ) {
     env.events().publish(
-        (symbol_short!("prop_ca"), proposal_id),
+        (symbol_short!("prop_cav1"), proposal_id),
         (canceller,),
     );
 }
 
-// ── Governance compatibility wrappers ─────────────────────────────────────
-//
-// Event ordering contract for governance proposal flow (indexer/replay safe):
-// 1) `prop_cr_v1` on create
-// 2) `vote_cs_v1` for each accepted vote, in vote call order
-// 3) `prop_qu_v1` on successful queue
-// 4) optional action event during execute (`fee_up_v1` | `pause_v1` | `unpaus_v1`)
-// 5) `prop_ex_v1` on successful execute
-//
-// Failed operations MUST NOT emit their corresponding success event.
+// ── Aliases for backward compatibility ───────────────────────
 
 pub fn emit_proposal_created(
     env: &Env,
@@ -696,10 +687,16 @@ pub fn emit_proposal_created(
     end_time: u64,
     eta: u64,
 ) {
-    env.events().publish(
-        (symbol_short!("prop_cr_v1"), proposal_id),
-        (proposer.clone(), action_type, start_time, end_time, eta),
-    );
+    emit_proposal_created_v1(env, proposal_id, proposer, action_type, start_time, end_time, eta);
+}
+
+pub fn emit_vote_cast(
+    env: &Env,
+    proposal_id: u64,
+    voter: &Address,
+    vote_choice: crate::types::VoteChoice,
+) {
+    emit_vote_cast_v1(env, proposal_id, voter, vote_choice);
 }
 
 pub fn emit_proposal_voted(
@@ -708,31 +705,30 @@ pub fn emit_proposal_voted(
     voter: &Address,
     vote_choice: crate::types::VoteChoice,
 ) {
-    env.events().publish(
-        (symbol_short!("vote_cs_v1"), proposal_id),
-        (voter.clone(), vote_choice),
-    );
+    emit_vote_cast_v1(env, proposal_id, voter, vote_choice);
 }
 
 pub fn emit_proposal_queued(
     env: &Env,
     proposal_id: u64,
     eta: u64,
-    queued_at: u64,
 ) {
-    env.events().publish(
-        (symbol_short!("prop_qu_v1"), proposal_id),
-        (eta, queued_at),
-    );
+    emit_proposal_queued_v1(env, proposal_id, eta);
 }
 
 pub fn emit_proposal_executed(
     env: &Env,
     proposal_id: u64,
-    action_type: crate::types::ActionType,
+    executor: &Address,
+    success: bool,
 ) {
-    env.events().publish(
-        (symbol_short!("prop_ex_v1"), proposal_id),
-        (action_type,),
-    );
+    emit_proposal_executed_v1(env, proposal_id, executor, success);
+}
+
+pub fn emit_proposal_cancelled(
+    env: &Env,
+    proposal_id: u64,
+    canceller: &Address,
+) {
+    emit_proposal_cancelled_v1(env, proposal_id, canceller);
 }
