@@ -66,13 +66,57 @@ export async function incrementSlidingWindow(
 }
 
 /**
+ * Extracts the real client IP respecting proxy configuration.
+ * Checks X-Forwarded-For, X-Real-IP, and falls back to direct connection.
+ * Honors TRUSTED_PROXY_IPS environment variable (comma-separated).
+ */
+export function extractClientIP(req: Request): string {
+  const trustedProxies = new Set(
+    (process.env.TRUSTED_PROXY_IPS || "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean)
+  );
+
+  const directIP = req.socket?.remoteAddress ?? req.ip ?? "unknown";
+
+  // If no proxies are trusted, return direct connection IP
+  if (trustedProxies.size === 0) {
+    return directIP;
+  }
+
+  // If direct connection is not a trusted proxy, return it
+  if (!trustedProxies.has(directIP)) {
+    return directIP;
+  }
+
+  // Check X-Forwarded-For (rightmost IP is most recent proxy, leftmost is client)
+  const xForwardedFor = req.headers["x-forwarded-for"];
+  if (xForwardedFor) {
+    const ips = Array.isArray(xForwardedFor)
+      ? xForwardedFor[0].split(",")
+      : xForwardedFor.split(",");
+    const clientIP = ips[0]?.trim();
+    if (clientIP) return clientIP;
+  }
+
+  // Check X-Real-IP as fallback
+  const xRealIP = req.headers["x-real-ip"];
+  if (xRealIP) {
+    return Array.isArray(xRealIP) ? xRealIP[0] : xRealIP;
+  }
+
+  return directIP;
+}
+
+/**
  * Builds the rate-limit key for a request.
- * Uses authenticated wallet address when available, otherwise falls back to IP.
+ * Uses authenticated wallet address when available, otherwise uses extracted IP.
  */
 export function resolveKey(req: Request, prefix: string): string {
   const user = (req as any).user;
   if (user?.walletAddress) return `${prefix}:wallet:${user.walletAddress}`;
-  const ip = req.ip ?? req.socket?.remoteAddress ?? "unknown";
+  const ip = extractClientIP(req);
   return `${prefix}:ip:${ip}`;
 }
 
