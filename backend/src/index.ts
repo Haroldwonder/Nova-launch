@@ -99,6 +99,8 @@ app.use("/api/docs", openApiRouter);
 
 import { healthService } from "./lib/health/health.service";
 import { isAppError, toAppError } from "./lib/errors";
+import { jobQueue } from "./services/jobQueue";
+import { streamReconciliationService } from "./services/streamReconciliation";
 
 // Health check — liveness (is the process alive?)
 app.get("/health/live", (_req, res) => {
@@ -182,6 +184,32 @@ app.use((req, res) => {
 const server = app.listen(PORT, async () => {
   console.log(`🚀 Admin API server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+
+  // Register job handlers
+  jobQueue.register("stream_reconciliation", async (job) => {
+    const result = await streamReconciliationService.reconcile();
+    if (result.divergences.length > 0) {
+      console.warn(
+        `Stream reconciliation found ${result.divergences.length} divergences`
+      );
+    }
+  });
+
+  // Start job queue
+  jobQueue.start();
+
+  // Schedule periodic stream reconciliation if enabled
+  if (process.env.ENABLE_STREAM_RECONCILIATION === "true") {
+    const reconciliationInterval = parseInt(
+      process.env.STREAM_RECONCILIATION_INTERVAL_MS || "3600000"
+    );
+    setInterval(() => {
+      jobQueue.enqueue("stream_reconciliation", {}, {});
+    }, reconciliationInterval);
+    console.log(
+      `📋 Stream reconciliation scheduled every ${reconciliationInterval}ms`
+    );
+  }
 
   // Attach WebSocket server for live event streaming
   websocketService.attach(server);
